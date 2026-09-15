@@ -30,7 +30,7 @@ def get_db():
     finally:
         conn.close()
 
-def init_db():
+def init_db(seed=False):
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -71,11 +71,12 @@ def init_db():
         """)
         conn.commit()
 
-        # Seed realistic initial data if empty
-        cursor.execute("SELECT COUNT(*) as count FROM inventory")
-        if cursor.fetchone()["count"] == 0:
-            seed_initial_data(cursor)
-            conn.commit()
+        # Only seed demo/mock data if explicitly requested
+        if seed:
+            cursor.execute("SELECT COUNT(*) as count FROM inventory")
+            if cursor.fetchone()["count"] == 0:
+                seed_initial_data(cursor)
+                conn.commit()
 
 def seed_initial_data(cursor):
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -1353,9 +1354,9 @@ HTML_UI = """<!DOCTYPE html>
     const res = await fetch('/api/inventory?status=Available');
     const available = await res.json();
     const select = document.getElementById('rev-assets');
-    select.innerHTML = available.map(a => `
-      <option value="${a.asset_tag}">[${a.asset_tag}] ${a.category}: ${a.model_name}</option>
-    `).join('');
+    select.innerHTML = available.length
+      ? available.map(a => `<option value="${a.asset_tag}">[${a.asset_tag}] ${a.category}: ${a.model_name}</option>`).join('')
+      : '<option disabled value="">No available inventory found. Register hardware first.</option>';
 
     document.getElementById('review-modal').classList.add('active');
   }
@@ -1626,10 +1627,14 @@ class RequestHandler(BaseHTTPRequestHandler):
         # Clean minimalist logger
         sys.stdout.write(f"[{datetime.now().strftime('%H:%M:%S')}] {args[0]} {args[1]} -> {args[2]}\n")
 
-def run(port=8080):
-    init_db()
+def run(port=8080, seed=None):
+    if seed is None:
+        seed = "--seed" in sys.argv or os.environ.get("SEED_MOCK_DATA", "").lower() in ("1", "true", "yes")
+    init_db(seed=seed)
     server = HTTPServer(("0.0.0.0", port), RequestHandler)
     print(f"[*] Equipment Allocation & Return Tracker active on http://localhost:{port}")
+    if seed:
+        print("[*] Demo mock data enabled.")
     print("[*] Press Ctrl+C to stop.")
     try:
         server.serve_forever()

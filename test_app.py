@@ -22,7 +22,7 @@ class TestEquipmentTracker(unittest.TestCase):
         app.DB_FILE = TEST_DB
         if os.path.exists(TEST_DB):
             os.remove(TEST_DB)
-        app.init_db()
+        app.init_db(seed=True)
 
     @classmethod
     def tearDownClass(cls):
@@ -144,7 +144,7 @@ class TestLiveHttpServer(unittest.TestCase):
 
         cls.port = 18088
         app.DB_FILE = TEST_DB
-        app.init_db()
+        app.init_db(seed=True)
         cls.server = HTTPServer(("127.0.0.1", cls.port), app.RequestHandler)
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -200,6 +200,82 @@ class TestLiveHttpServer(unittest.TestCase):
             res_data = json.loads(resp.read().decode("utf-8"))
             self.assertTrue(res_data["success"])
             self.assertIn("id", res_data)
+
+
+class TestCleanStartupAndDataRetention(unittest.TestCase):
+    clean_db = os.path.join(os.path.dirname(__file__), "clean_test_equipment.db")
+
+    @classmethod
+    def setUpClass(cls):
+        app.DB_FILE = cls.clean_db
+        if os.path.exists(cls.clean_db):
+            os.remove(cls.clean_db)
+
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.exists(cls.clean_db):
+            try:
+                os.remove(cls.clean_db)
+            except OSError:
+                pass
+
+    def test_09_clean_startup_no_mock_data(self):
+        # Initialize without seed flag
+        app.init_db(seed=False)
+
+        stats = app.get_stats()
+        self.assertEqual(stats["total_inventory"], 0)
+        self.assertEqual(stats["available_inventory"], 0)
+        self.assertEqual(stats["pending_requests"], 0)
+        self.assertEqual(stats["allocated_value"], 0.0)
+        self.assertEqual(len(app.list_inventory()), 0)
+        self.assertEqual(len(app.list_requests()), 0)
+
+    def test_10_user_input_retention_across_restarts(self):
+        # Add real user inventory
+        user_item = {
+            "asset_tag": "AST-USER-100",
+            "category": "Laptop",
+            "model_name": "Custom Workstation Z9",
+            "serial_number": "SN-USR-10001",
+            "asset_value": 3100.00,
+            "cost_center": "ENG-DEV"
+        }
+        item_id = app.add_inventory_item(user_item)
+        self.assertIsInstance(item_id, int)
+
+        # Add real user request
+        user_req = {
+            "employee_name": "Morgan Riley",
+            "employee_email": "morgan.r@company.io",
+            "department": "Engineering",
+            "role_title": "Lead Infrastructure Architect",
+            "shipping_address": "100 Innovation Way, Denver, CO 80202",
+            "setup_tier": "Engineering",
+            "requested_items": "Custom Workstation Z9",
+            "return_agreement_signed": 1
+        }
+        req_id = app.create_request(user_req)
+        self.assertIsInstance(req_id, int)
+
+        # Simulate system shutdown / restart by calling init_db(seed=False) again
+        app.init_db(seed=False)
+
+        # Verify user data is retained perfectly and mock data is NOT injected
+        inv = app.list_inventory()
+        self.assertEqual(len(inv), 1)
+        self.assertEqual(inv[0]["asset_tag"], "AST-USER-100")
+        self.assertEqual(inv[0]["model_name"], "Custom Workstation Z9")
+
+        reqs = app.list_requests()
+        self.assertEqual(len(reqs), 1)
+        self.assertEqual(reqs[0]["employee_name"], "Morgan Riley")
+        self.assertEqual(reqs[0]["employee_email"], "morgan.r@company.io")
+
+        # Verify no mock seed data exists in the database
+        tags = [i["asset_tag"] for i in inv]
+        self.assertNotIn("AST-0101", tags)
+        self.assertNotIn("AST-0102", tags)
 
 if __name__ == "__main__":
     unittest.main()

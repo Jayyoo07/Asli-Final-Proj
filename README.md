@@ -27,7 +27,7 @@ A minimalist, zero-dependency Python application designed to track and manage re
 - **Zero External Dependencies**: Built entirely with Python's standard library (`http.server`, `sqlite3`, `json`, `urllib`, `contextlib`). Runs on any clean Python 3.10+ installation without `pip install`.
 - **Clean Architecture**: Concise, production-ready implementation without framework bloat.
 - **Embedded Minimalist Interface**: Fast, responsive single-page web UI crafted with semantic HTML, modern typography, and a dark slate aesthetic with real-time feedback.
-- **Automated SQLite Persistence**: Automatically creates tables and seeds realistic data on initial startup so the system is immediately usable.
+- **Automated SQLite Persistence**: Automatically initializes tables without mock data on initial startup so all entries entered by users are persisted and retained across server restarts. (An optional `--seed` flag is supported if demo data is desired).
 
 ---
 
@@ -43,7 +43,7 @@ The application server will start at:
 ```
 http://localhost:8080
 ```
-*(Optionally specify a custom port with the `PORT` environment variable, e.g. `PORT=9000 python app.py`)*
+*(Optionally specify a custom port with the `PORT` environment variable, e.g. `PORT=9000 python app.py`. To populate demo mock data, run `python app.py --seed`)*
 
 ### 2. Run the Test Suite
 
@@ -51,8 +51,9 @@ http://localhost:8080
 python test_app.py
 ```
 
-Runs 8 automated unit and HTTP integration tests validating:
-- Database schema initialization & auto-seeding
+Runs 10 automated unit and HTTP integration tests validating:
+- Clean database schema initialization without mock data
+- User data persistence across restarts
 - Hardware request submission
 - Inventory allocation & tag assignment
 - Logistics tracking updates
